@@ -1,0 +1,247 @@
+---
+title: "ega assignment"
+output: html_notebook
+---
+
+
+```{r}
+library(NLP)
+library("tm")  
+library("SnowballC")
+```
+
+```{r}
+# load dataframe
+load("./trump.df.Rdata")
+```
+
+
+```{r}
+# check first tweet
+trump.df$text[1]
+```
+
+```{r}
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x)
+```
+
+```{r}
+set.seed(1234)
+#1 Convert the text to a corpus object;
+trump.corpus <- Corpus(VectorSource(trump.df[,1]))
+#2 Use the function removeURL;
+trump.corpus <- tm_map(trump.corpus, removeURL)
+#3 Use the function tolower;
+trump.corpus <- tm_map(trump.corpus, tolower)
+#4 Use the function removePunctuation;
+trump.corpus <- tm_map(trump.corpus, removePunctuation)
+#5 Use the function removeNumbers;
+trump.corpus <- tm_map(trump.corpus, removeNumbers)
+#6 Use the function removeNumPunct;
+trump.corpus <- tm_map(trump.corpus, removeNumPunct)
+#7 Use the function removeWords (to remove stopwords in english);
+trump.corpus <- tm_map(trump.corpus, removeWords, stopwords("english"))
+#8 Use the function stemDocument;
+trump.corpus <- tm_map(trump.corpus, stemDocument)
+```
+
+```{r}
+trump.dtm <- DocumentTermMatrix(trump.corpus)
+trump.dtm
+```
+
+```{r}
+trump.dtm2 <- removeSparseTerms(trump.dtm, 0.98)
+trump.dtm2
+```
+
+```{r}
+data.trump <- as.data.frame(as.matrix(trump.dtm2))
+data.trump
+```
+
+```{r}
+#EGA:
+library(devtools)
+install_github("hfgolino/EGA")
+#NetworkToolbox
+library("NetworkToolbox")
+```
+
+```{r}
+# 1. How many words (terms) do you have in the document-term matrix trump.dtm2 ?
+## 102
+```
+
+
+```{r}
+# 2. Use the cor_auto function from the qgraph package to calculate the correlation between Donald Trump’s
+# words (use the data.trump dataset). Use the qgraph package to plot the resulting network structure,
+# and set layout=“spring”.
+library(qgraph)
+cor.trump <- cor_auto(data.trump)
+plot.trump <- qgraph(cor.trump, layout = "spring")
+
+```
+
+```{r}
+# 3. Which word has the highest degree centrality? Use the centrality function of the qgraph package to compute the centrality metrics. Note that the centrality function will take the correlation matrix as an input.
+#Vote
+
+centrality.trump <- centrality(cor.trump)
+
+degree.df <- data.frame(Area = colnames(data.trump), Degree = centrality.trump$InDegree)
+head(degree.df[order(degree.df$Degree, decreasing = TRUE), ], 20)
+```
+```{r}
+# 4. Which word has the highest betweenness centrality? Use the centrality function of the qgraph package to compute the centrality metrics. Note that the centrality function will take the correlation matrix as an input.
+
+betweenness.df <- data.frame(Area = colnames(data.trump), Betweenness = centrality.trump$Betweenness)
+head(betweenness.df[order(betweenness.df$Betweenness, decreasing = TRUE), ], 20)
+```
+
+```{r}
+# 5. Which word has the highest strenght centrality? Use the centrality function of the qgraph package to
+# compute the centrality metrics. Note that the centrality function will take the correlation matrix as an
+# input, and the strenght centrality is labeled InExpectedInfluence or OutExpectedInfluence.
+strength.df <- data.frame(Area = colnames(data.trump), Strength = centrality.trump$InExpectedInfluence)
+head(strength.df[order(strength.df$Strength, decreasing = TRUE), ], 20)
+
+```
+
+```{r}
+# 6. Plot Donald Trump’s network (words correlation matrix) with the size of each node as the OutDegree
+# measure divided by 10.
+
+plot2.trump<- qgraph(cor.trump, directed = FALSE, layout = "spring", 
+                     vsize = as.numeric(centrality.trump$OutDegree/10))
+plot2.trump
+```
+
+```{r}
+# 7. Use the EGA function from the EGA package to estimate the latent factors in the data.trump dataset.
+# Se the argument model = “glasso” to estimate a network using the Gaussian Graphical Model. Save
+# the results in a object named ega.trump.ggm. How many latent factors (or clusters) did you find?
+# 15
+
+library(EGA)
+ega.trump.ggm <- EGA(data.trump, model = 'glasso')
+```
+
+```{r}
+# 8. Interpret the clusters/factors (i.e. give a title for each cluster/factor).
+# Community 1: North Korean Summit
+# Community 2: Republican approval ratings
+# Community 3: Border Wall
+# Community 4: Presidential harassers
+# Community 5: Military
+# Community 6: North Korean
+# Community 7: Michael Cohen testimony
+# Community 8: Fake News
+# Community 9: Burr/Intelligence Community
+# Community 10: United States
+# Community 11: Andrew McCabe
+# Community 12: Venezuela crisis
+# Community 13: job/done
+# Community 14: Greatest Country
+# Community 15: Border wall
+ega.trump.ggm$dim.variables
+```
+
+```{r}
+# 9. What is the main difference between the network generated using the cor_trump object and the network
+# ploted using the EGA package with model=“glasso”?
+
+# Variables are closer together
+```
+
+```{r}
+# 10. Use the EGA function from the EGA package to estimate the latent factors in the data.trump dataset.
+# Set the argument model = “TMFG” to estimate a network using the TMFG estimation. Save the results
+# in a object named ega.trump.tmfg. How many latent factors (or latent clusters) did you find using the
+# TMFG estimation?
+
+# 6 latent factors
+
+ega.trump.tmfg <- EGA(data.trump, model = 'TMFG')
+
+```
+
+```{r}
+# 11. Interpret the clusters/factors estimated using the TMFG method (i.e. give a title for each cluster/factor).
+# Community 1: Republican approval, Andrew McCabe, Venzeula crisis
+# Community 2: Border Wall
+# Community 3: 
+# Community 4: Fake News/Micheal Cohen
+# Community 5: North Korean Summit
+# Community 6: Burr/Intelligence Committee
+
+ega.trump.tmfg$dim.variables
+```
+
+```{r}
+# 12. Use the NetworkToolbox package to calculate the cluster scores for Donald Trump’s tweets (see the
+# code below) and create a dataset named scores.sentiment.trump with all the standardized community
+# scores (community score = cluster score, or a score for each cluster/factor estimated), the date of the
+# tweet and the variable Summit, both available in the trump.df dataset. Note: Don’t use the overall
+# score, that will be stored in your scores.trump data frame. Not graded.
+
+scores.trump <- nams(data.trump,
+                     A = ega.trump.tmfg$network,
+                     comm =ega.trump.tmfg$wc,
+                     standardize = TRUE)
+
+head(scores.trump)
+
+```
+
+```{r}
+head(trump.df)
+```
+
+```{r}
+scores.sentiment.trump <- data.frame(CommunityScore = scores.trump$Standardized,
+                                     Date = trump.df$created,
+                                     Summit = trump.df$Summit)
+
+head(scores.sentiment.trump)
+```
+
+```{r}
+# 13. Use the ggpubr package to plot the Community3 scores by date (use the ggline function), colored by
+# the variable Summit. Also, use facet.by = Summit. Not graded.
+
+library(ggpubr)
+
+ggpubr.com3 <- ggline(scores.sentiment.trump, x = 'Date', y = 'CommunityScore.Community3',
+                      color = "Summit", facet.by = "Summit", ggtheme = theme_bw())
+
+ggpubr.com3
+```
+
+```{r}
+# 14. Verify if the cluster structure estimated using EGA with model = “TMFG” is stable. Use the bootEGA
+# function and set: type = parametric, n = 100, model = “TMFG”. Interpret the results, explaining if
+# the cluster structure initially estimated via EGA (with TMFG) could be replicated using bootEGA.
+
+# Although the two models are similar, I would not say the bootEGA replicated the original EGA.  In the original EGA, there were (6) clusters identified versus (8) in the bootEGA.  Moreover, in the summary of the bootEGA the median.dim was (7) with confidence intervals of (6.72, 7.28) which does not match either model. The liklihood table for bootEGA is a toss up between 6, 7, or 8 clusters. For these reasons I do not believe the original TMGF EGA model is stable. 
+
+boot.ega.trump <- bootEGA(data.trump, n = 100, model = "TMFG", type = "parametric", 
+                          typicalStructure = TRUE, plot.typicalStructure = TRUE)
+boot.ega.trump
+```
+
+```{r}
+boot.ega.trump$summary.table
+```
+
+```{r}
+boot.ega.trump$likelihood
+```
+
+
+
+
+
+
